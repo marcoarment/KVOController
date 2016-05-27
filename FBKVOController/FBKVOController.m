@@ -617,7 +617,6 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
   }
 
   // create info
-  _FBKVOInfo *info = [[_FBKVOInfo alloc] initWithController:self keyPath:keyPath options:options action:action];
   _FBKVOInfo *info = [[_FBKVOInfo alloc] initWithController:self keyPath:keyPath options:options action:action queue:queue];
 
   // observe object with info
