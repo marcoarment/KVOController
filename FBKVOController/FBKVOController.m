@@ -80,6 +80,30 @@ static NSString *describe_options(NSKeyValueObservingOptions options)
   return s;
 }
 
+@class _FBKVOInfo;
+
+/**
+ @abstract The shared KVO controller instance.
+ @discussion Acts as a receptionist, receiving and forwarding KVO notifications.
+ */
+@interface _FBKVOSharedController : NSObject
+
+/** A shared instance that never deallocates. */
++ (instancetype)sharedController;
+
+/** observe an object, info pair */
+- (void)observe:(id)object info:(nullable _FBKVOInfo *)info;
+
+/** unobserve an object, info pair */
+- (void)unobserve:(id)object info:(nullable _FBKVOInfo *)info;
+
+/** unobserve an object with a set of infos */
+- (void)unobserve:(id)object infos:(nullable NSSet *)infos;
+
+@property (nonatomic, nullable) dispatch_queue_t defaultQueue;
+
+@end
+
 #pragma mark _FBKVOInfo -
 
 typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
@@ -136,7 +160,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options block:(FBKVONotificationBlock)block
 {
-  return [self initWithController:controller keyPath:keyPath options:options block:block action:NULL queue:NULL context:NULL];
+  return [self initWithController:controller keyPath:keyPath options:options block:block action:NULL queue:[_FBKVOSharedController sharedController].defaultQueue context:NULL];
 }
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue
@@ -146,12 +170,12 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options context:(void *)context
 {
-  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:NULL queue:NULL context:context];
+  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:NULL queue:[_FBKVOSharedController sharedController].defaultQueue context:context];
 }
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath
 {
-  return [self initWithController:controller keyPath:keyPath options:0 block:NULL action:NULL queue:NULL context:NULL];
+  return [self initWithController:controller keyPath:keyPath options:0 block:NULL action:NULL queue:[_FBKVOSharedController sharedController].defaultQueue context:NULL];
 }
 
 - (NSUInteger)hash
@@ -198,26 +222,6 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 @end
 
 #pragma mark _FBKVOSharedController -
-
-/**
- @abstract The shared KVO controller instance.
- @discussion Acts as a receptionist, receiving and forwarding KVO notifications.
- */
-@interface _FBKVOSharedController : NSObject
-
-/** A shared instance that never deallocates. */
-+ (instancetype)sharedController;
-
-/** observe an object, info pair */
-- (void)observe:(id)object info:(nullable _FBKVOInfo *)info;
-
-/** unobserve an object, info pair */
-- (void)unobserve:(id)object info:(nullable _FBKVOInfo *)info;
-
-/** unobserve an object with a set of infos */
-- (void)unobserve:(id)object infos:(nullable NSSet *)infos;
-
-@end
 
 @implementation _FBKVOSharedController
 {
@@ -575,6 +579,16 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 }
 
 #pragma mark API -
+
++ (void)setObserveOnMainQueueByDefault:(BOOL)observeOnMainQueueByDefault
+{
+  [_FBKVOSharedController sharedController].defaultQueue = observeOnMainQueueByDefault ? dispatch_get_main_queue() : NULL;
+}
+
++ (BOOL)observeOnMainQueueByDefault
+{
+  return [_FBKVOSharedController sharedController].defaultQueue == dispatch_get_main_queue();
+}
 
 - (void)observe:(nullable id)object keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options block:(FBKVONotificationBlock)block
 {

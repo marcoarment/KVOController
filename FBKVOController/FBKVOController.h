@@ -83,6 +83,21 @@ typedef void (^FBKVONotificationBlock)(id _Nullable observer, id object, NSDicti
 @property (nullable, nonatomic, weak, readonly) id observer;
 
 /**
+ @abstract Set or disable global main-thread safety.
+ @param observeOnMainQueueByDefault If YES, observers will be created as if the queue parameter were set to the main queue. Default is NO.
+ @discussion If set to YES, observers will only be called synchronously for changes that occur on the main queue. Changes that occur outside the main queue will call their observers asynchronously, so the observed values may be out of date.
+ */
++ (void)setObserveOnMainQueueByDefault:(BOOL)observeOnMainQueueByDefault;
+
+/**
+ @abstract If YES, observers will be created as if the queue parameter were set to the main queue. Default is NO.
+ */
++ (BOOL)observeOnMainQueueByDefault;
+
+
+@property (nonatomic) BOOL observeOnMainQueueByDefault;
+
+/**
  @abstract Registers observer for key-value change notification.
  @param object The object to observe.
  @param keyPath The key path to observe.
