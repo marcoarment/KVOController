@@ -107,6 +107,17 @@ typedef void (^FBKVONotificationBlock)(id _Nullable observer, id object, NSDicti
  @param object The object to observe.
  @param keyPath The key path to observe.
  @param options The NSKeyValueObservingOptions to use for observation.
+ @param action The observer selector called on key-value change.
+ @param queue The queue on which to invoke the action, or nil to use the current queue when the change occurs (standard KVO behavior). If the main queue is specified and the change occurs on the main queue, the action be called synchronously, otherwise it will be dispatched asynchronously.
+ @discussion On key-value change, the observer's action selector is called. The selector provided should take the form of -propertyDidChange, -propertyDidChange: or -propertyDidChange:object:, where optional parameters delivered will be KVO change dictionary and object observed. Observing nil or observing an already observed object's key path results in no operation.
+ */
+- (void)observe:(nullable id)object keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue;
+
+/**
+ @abstract Registers observer for key-value change notification.
+ @param object The object to observe.
+ @param keyPath The key path to observe.
+ @param options The NSKeyValueObservingOptions to use for observation.
  @param context The context specified.
  @discussion On key-value change, the observer's -observeValueForKeyPath:ofObject:change:context: method is called. Observing an already observed object key path or nil results in no operation.
  */
@@ -129,9 +140,10 @@ typedef void (^FBKVONotificationBlock)(id _Nullable observer, id object, NSDicti
  @param keyPaths The key paths to observe.
  @param options The NSKeyValueObservingOptions to use for observation.
  @param action The observer selector called on key-value change.
+ @param queue The queue on which to invoke the action, or nil to use the current queue when the change occurs (standard KVO behavior). If the main queue is specified and the change occurs on the main queue, the action be called synchronously, otherwise it will be dispatched asynchronously.
  @discussion On key-value change, the observer's action selector is called. The selector provided should take the form of -propertyDidChange, -propertyDidChange: or -propertyDidChange:object:, where optional parameters delivered will be KVO change dictionary and object observed. Observing nil or observing an already observed object's key path results in no operation.
  */
-- (void)observe:(nullable id)object keyPaths:(NSArray<NSString *> *)keyPaths options:(NSKeyValueObservingOptions)options action:(SEL)action;
+- (void)observe:(nullable id)object keyPaths:(NSArray<NSString *> *)keyPaths options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue;
 
 /**
  @abstract Registers observer for key-value change notification.

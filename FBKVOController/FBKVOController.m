@@ -107,6 +107,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
   NSString *_keyPath;
   NSKeyValueObservingOptions _options;
   SEL _action;
+  dispatch_queue_t _queue;
   void *_context;
   FBKVONotificationBlock _block;
   _FBKVOInfoState _state;
@@ -117,6 +118,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
                            options:(NSKeyValueObservingOptions)options
                              block:(nullable FBKVONotificationBlock)block
                             action:(nullable SEL)action
+                             queue:(nullable dispatch_queue_t)queue
                            context:(nullable void *)context
 {
   self = [super init];
@@ -126,6 +128,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
     _keyPath = [keyPath copy];
     _options = options;
     _action = action;
+    _queue = queue;
     _context = context;
   }
   return self;
@@ -133,22 +136,22 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options block:(FBKVONotificationBlock)block
 {
-  return [self initWithController:controller keyPath:keyPath options:options block:block action:NULL context:NULL];
+  return [self initWithController:controller keyPath:keyPath options:options block:block action:NULL queue:NULL context:NULL];
 }
 
-- (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action
+- (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue
 {
-  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:action context:NULL];
+  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:action queue:queue context:NULL];
 }
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options context:(void *)context
 {
-  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:NULL context:context];
+  return [self initWithController:controller keyPath:keyPath options:options block:NULL action:NULL queue:NULL context:context];
 }
 
 - (instancetype)initWithController:(FBKVOController *)controller keyPath:(NSString *)keyPath
 {
-  return [self initWithController:controller keyPath:keyPath options:0 block:NULL action:NULL context:NULL];
+  return [self initWithController:controller keyPath:keyPath options:0 block:NULL action:NULL queue:NULL context:NULL];
 }
 
 - (NSUInteger)hash
@@ -178,6 +181,9 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
   }
   if (NULL != _action) {
     [s appendFormat:@" action:%@", NSStringFromSelector(_action)];
+  }
+  if (NULL != _queue) {
+    [s appendFormat:@" queue:%s", dispatch_queue_get_label(_queue)];
   }
   if (NULL != _context) {
     [s appendFormat:@" context:%p", _context];
@@ -372,14 +378,26 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
         // dispatch custom block or action, fall back to default action
         if (info->_block) {
-          info->_block(observer, object, change);
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+            dispatch_async(info->_queue, ^{ info->_block(observer, object, change); });
+          } else {
+            info->_block(observer, object, change);
+          }
         } else if (info->_action) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-          [observer performSelector:info->_action withObject:change withObject:object];
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+            dispatch_async(info->_queue, ^{ [observer performSelector:info->_action withObject:change withObject:object]; });
+          } else {
+            [observer performSelector:info->_action withObject:change withObject:object];
+          }
 #pragma clang diagnostic pop
         } else {
-          [observer observeValueForKeyPath:keyPath ofObject:object change:change context:info->_context];
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+            dispatch_async(info->_queue, ^{ [observer observeValueForKeyPath:keyPath ofObject:object change:change context:info->_context]; });
+          } else {
+            [observer observeValueForKeyPath:keyPath ofObject:object change:change context:info->_context];
+          }
         }
       }
     }
@@ -587,6 +605,11 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
 - (void)observe:(nullable id)object keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action
 {
+  [self observe:object keyPath:keyPath options:options action:action queue:NULL];
+}
+
+- (void)observe:(nullable id)object keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue
+{
   NSAssert(0 != keyPath.length && NULL != action, @"missing required parameters observe:%@ keyPath:%@ action:%@", object, keyPath, NSStringFromSelector(action));
   NSAssert([_observer respondsToSelector:action], @"%@ does not respond to %@", _observer, NSStringFromSelector(action));
   if (nil == object || 0 == keyPath.length || NULL == action) {
@@ -595,12 +618,18 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
   // create info
   _FBKVOInfo *info = [[_FBKVOInfo alloc] initWithController:self keyPath:keyPath options:options action:action];
+  _FBKVOInfo *info = [[_FBKVOInfo alloc] initWithController:self keyPath:keyPath options:options action:action queue:queue];
 
   // observe object with info
   [self _observe:object info:info];
 }
 
 - (void)observe:(nullable id)object keyPaths:(NSArray<NSString *> *)keyPaths options:(NSKeyValueObservingOptions)options action:(SEL)action
+{
+  [self observe:object keyPaths:keyPaths options:options action:action queue:NULL];
+}
+
+- (void)observe:(nullable id)object keyPaths:(NSArray<NSString *> *)keyPaths options:(NSKeyValueObservingOptions)options action:(SEL)action queue:(nullable dispatch_queue_t)queue
 {
   NSAssert(0 != keyPaths.count && NULL != action, @"missing required parameters observe:%@ keyPath:%@ action:%@", object, keyPaths, NSStringFromSelector(action));
   NSAssert([_observer respondsToSelector:action], @"%@ does not respond to %@", _observer, NSStringFromSelector(action));
@@ -609,7 +638,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
   }
 
   for (NSString *keyPath in keyPaths) {
-    [self observe:object keyPath:keyPath options:options action:action];
+    [self observe:object keyPath:keyPath options:options action:action queue:queue];
   }
 }
 
