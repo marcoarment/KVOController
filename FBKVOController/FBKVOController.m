@@ -80,6 +80,16 @@ static NSString *describe_options(NSKeyValueObservingOptions options)
   return s;
 }
 
+static BOOL is_main_queue()
+{
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dispatch_queue_set_specific(dispatch_get_main_queue(), &onceToken, &onceToken, NULL);
+    });
+
+    return dispatch_get_specific(&onceToken) == &onceToken;
+}
+
 @class _FBKVOInfo;
 
 /**
@@ -382,7 +392,7 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
 
         // dispatch custom block or action, fall back to default action
         if (info->_block) {
-          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && is_main_queue()) ) {
             dispatch_async(info->_queue, ^{ info->_block(observer, object, change); });
           } else {
             info->_block(observer, object, change);
@@ -390,14 +400,14 @@ typedef NS_ENUM(uint8_t, _FBKVOInfoState) {
         } else if (info->_action) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && is_main_queue()) ) {
             dispatch_async(info->_queue, ^{ [observer performSelector:info->_action withObject:change withObject:object]; });
           } else {
             [observer performSelector:info->_action withObject:change withObject:object];
           }
 #pragma clang diagnostic pop
         } else {
-          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && [NSThread isMainThread]) ) {
+          if (info->_queue && ! (info->_queue == dispatch_get_main_queue() && is_main_queue()) ) {
             dispatch_async(info->_queue, ^{ [observer observeValueForKeyPath:keyPath ofObject:object change:change context:info->_context]; });
           } else {
             [observer observeValueForKeyPath:keyPath ofObject:object change:change context:info->_context];
